@@ -27,7 +27,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { ZepClient } from '@getzep/zep-cloud';
+import { ZepClient } from 'zep-cloud';
 
 const zepApiKey = process.env.ZEP_API_KEY;
 if (!zepApiKey) {
@@ -129,8 +129,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           metadata?: Record<string, any>;
         };
 
-        // Store as messages in a Zep thread
-        await zep.thread.addMessages(session_id, {
+        // Store as a message in Zep
+        await zep.memory.add(session_id, {
           messages: [
             {
               role: 'user',
@@ -151,7 +151,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [
             {
               type: 'text',
-              text: `✓ Stored in thread "${session_id}"`,
+              text: `✓ Stored in session "${session_id}"`,
             },
           ],
         };
@@ -164,19 +164,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           limit?: number;
         };
 
-        // Search the graph for relevant information
-        const searchResults = await zep.graph.search({
-          query: query,
-          userId: session_id,
-          limit: limit,
+        const results = await zep.memory.search(session_id, {
+          text: query,
+          limit,
         });
 
-        const formatted = searchResults.edges
-          ?.map((edge: any, i: number) => {
-            const fact = edge.fact || 'N/A';
-            const source = edge.source?.name || 'Unknown';
-            const target = edge.target?.name || 'Unknown';
-            return `${i + 1}. ${fact}\n   Source: ${source} → Target: ${target}`;
+        const formatted = results
+          .map((result: any, i: number) => {
+            const meta = result.metadata || {};
+            return `${i + 1}. ${result.content}\n   Metadata: ${JSON.stringify(meta)}`;
           })
           .join('\n\n');
 
@@ -193,9 +189,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'zep_get_memory': {
         const { session_id } = args as { session_id: string };
 
-        // Get messages from the thread
-        const messageList = await zep.thread.get(session_id);
-        const messages = messageList.messages || [];
+        const memory = await zep.memory.get(session_id);
+        const messages = memory.messages || [];
 
         const formatted = messages
           .filter((msg: any) => msg.role === 'assistant')
@@ -208,7 +203,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [
             {
               type: 'text',
-              text: formatted || 'No memories found in this thread',
+              text: formatted || 'No memories found in this session',
             },
           ],
         };
