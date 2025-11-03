@@ -27,7 +27,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { ZepClient } from 'zep-cloud';
+import { ZepClient } from '@getzep/zep-cloud';
 
 const zepApiKey = process.env.ZEP_API_KEY;
 if (!zepApiKey) {
@@ -61,7 +61,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             session_id: {
               type: 'string',
-              description: 'Session ID (e.g., "global" or "project-my-app")',
+              description: 'Thread/Session ID (e.g., "global" or "project-my-app")',
             },
             content: {
               type: 'string',
@@ -83,7 +83,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             session_id: {
               type: 'string',
-              description: 'Session ID to search',
+              description: 'Thread/Session ID to search',
             },
             query: {
               type: 'string',
@@ -106,7 +106,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             session_id: {
               type: 'string',
-              description: 'Session ID to retrieve',
+              description: 'Thread/Session ID to retrieve',
             },
           },
           required: ['session_id'],
@@ -129,8 +129,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           metadata?: Record<string, any>;
         };
 
-        // Store as a message in Zep
-        await zep.memory.add(session_id, {
+        // Ensure user exists (create if it doesn't)
+        try {
+          await zep.user.add({
+            userId: 'default_user',
+            email: 'default@example.com',
+            firstName: 'Claude',
+            lastName: 'Code'
+          });
+        } catch (error: any) {
+          // Ignore errors - user might already exist
+          // We'll let subsequent operations fail if there's a real issue
+        }
+
+        // Ensure thread exists (create if it doesn't)
+        try {
+          await zep.thread.create({
+            threadId: session_id,
+            userId: 'default_user'
+          });
+        } catch (error: any) {
+          // Ignore errors - thread might already exist
+          // We'll let subsequent operations fail if there's a real issue
+        }
+
+        // Store as a message in Zep thread
+        await zep.thread.addMessages(session_id, {
           messages: [
             {
               role: 'user',
@@ -151,7 +175,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [
             {
               type: 'text',
-              text: `✓ Stored in session "${session_id}"`,
+              text: `✓ Stored in thread "${session_id}"`,
             },
           ],
         };
@@ -164,15 +188,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           limit?: number;
         };
 
-        const results = await zep.memory.search(session_id, {
-          text: query,
-          limit,
+        // Use graph search to search across user's memory
+        const results = await zep.graph.search({
+          userId: 'default_user',
+          query: query,
+          limit: limit,
         });
 
-        const formatted = results
-          .map((result: any, i: number) => {
-            const meta = result.metadata || {};
-            return `${i + 1}. ${result.content}\n   Metadata: ${JSON.stringify(meta)}`;
+        const formatted = (results.edges || [])
+          .map((edge: any, i: number) => {
+            return `${i + 1}. ${edge.fact || edge.name || 'N/A'}`;
           })
           .join('\n\n');
 
@@ -189,8 +214,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'zep_get_memory': {
         const { session_id } = args as { session_id: string };
 
-        const memory = await zep.memory.get(session_id);
-        const messages = memory.messages || [];
+        const response = await zep.thread.get(session_id, {});
+        const messages = response.messages || [];
 
         const formatted = messages
           .filter((msg: any) => msg.role === 'assistant')
@@ -203,7 +228,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           content: [
             {
               type: 'text',
-              text: formatted || 'No memories found in this session',
+              text: formatted || 'No memories found in this thread',
             },
           ],
         };
@@ -217,7 +242,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       content: [
         {
           type: 'text',
-          text: `Error: ${error.message}`,
+          text: `Error: ${error.message || JSON.stringify(error)}`,
         },
       ],
       isError: true,

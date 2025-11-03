@@ -1,6 +1,8 @@
 # Zep MCP Server
 
-Simple MCP server that wraps Zep Cloud API for use with Claude Code.
+Simple MCP server that wraps Zep Cloud API (v3) for use with Claude Code.
+
+Enables Claude Code to store and retrieve memories using Zep's thread-based memory system.
 
 ## Installation
 ```bash
@@ -42,10 +44,13 @@ Search for information in a Zep session.
 ### zep_get_memory
 Get all recent memories from a session.
 
-## Session Naming Convention
+## Thread/Session Naming Convention
 
 - Global knowledge: `global`
 - Project-specific: `project-{name}`
+- User-specific: `user-{username}`
+
+Note: This server uses Zep Cloud v3 API which uses "threads" instead of "sessions". The tools still accept `session_id` for backwards compatibility.
 
 ## Example
 ```

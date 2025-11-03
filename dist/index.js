@@ -50,7 +50,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                     properties: {
                         session_id: {
                             type: 'string',
-                            description: 'Session ID (e.g., "global" or "project-my-app")',
+                            description: 'Thread/Session ID (e.g., "global" or "project-my-app")',
                         },
                         content: {
                             type: 'string',
@@ -72,7 +72,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                     properties: {
                         session_id: {
                             type: 'string',
-                            description: 'Session ID to search',
+                            description: 'Thread/Session ID to search',
                         },
                         query: {
                             type: 'string',
@@ -95,7 +95,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                     properties: {
                         session_id: {
                             type: 'string',
-                            description: 'Session ID to retrieve',
+                            description: 'Thread/Session ID to retrieve',
                         },
                     },
                     required: ['session_id'],
@@ -111,7 +111,31 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         switch (name) {
             case 'zep_store_memory': {
                 const { session_id, content, metadata = {} } = args;
-                // Store as messages in a Zep thread
+                // Ensure user exists (create if it doesn't)
+                try {
+                    await zep.user.add({
+                        userId: 'default_user',
+                        email: 'default@example.com',
+                        firstName: 'Claude',
+                        lastName: 'Code'
+                    });
+                }
+                catch (error) {
+                    // Ignore errors - user might already exist
+                    // We'll let subsequent operations fail if there's a real issue
+                }
+                // Ensure thread exists (create if it doesn't)
+                try {
+                    await zep.thread.create({
+                        threadId: session_id,
+                        userId: 'default_user'
+                    });
+                }
+                catch (error) {
+                    // Ignore errors - thread might already exist
+                    // We'll let subsequent operations fail if there's a real issue
+                }
+                // Store as a message in Zep thread
                 await zep.thread.addMessages(session_id, {
                     messages: [
                         {
@@ -139,18 +163,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }
             case 'zep_search_memory': {
                 const { session_id, query, limit = 10 } = args;
-                // Search the graph for relevant information
-                const searchResults = await zep.graph.search({
+                // Use graph search to search across user's memory
+                const results = await zep.graph.search({
+                    userId: 'default_user',
                     query: query,
-                    userId: session_id,
                     limit: limit,
                 });
-                const formatted = searchResults.edges
-                    ?.map((edge, i) => {
-                    const fact = edge.fact || 'N/A';
-                    const source = edge.source?.name || 'Unknown';
-                    const target = edge.target?.name || 'Unknown';
-                    return `${i + 1}. ${fact}\n   Source: ${source} → Target: ${target}`;
+                const formatted = (results.edges || [])
+                    .map((edge, i) => {
+                    return `${i + 1}. ${edge.fact || edge.name || 'N/A'}`;
                 })
                     .join('\n\n');
                 return {
@@ -164,9 +185,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             }
             case 'zep_get_memory': {
                 const { session_id } = args;
-                // Get messages from the thread
-                const messageList = await zep.thread.get(session_id);
-                const messages = messageList.messages || [];
+                const response = await zep.thread.get(session_id, {});
+                const messages = response.messages || [];
                 const formatted = messages
                     .filter((msg) => msg.role === 'assistant')
                     .map((msg, i) => {
@@ -191,7 +211,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             content: [
                 {
                     type: 'text',
-                    text: `Error: ${error.message}`,
+                    text: `Error: ${error.message || JSON.stringify(error)}`,
                 },
             ],
             isError: true,
