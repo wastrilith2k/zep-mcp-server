@@ -1,12 +1,26 @@
 {
   "name": "zep-mcp-server",
   "version": "1.0.0",
-  "description": "Simple MCP server that wraps Zep Cloud API for use with Claude Code.",
-  "main": "index.js",
+  "description": "MCP server for Zep Cloud integration with Claude Code",
+  "type": "module",
+  "main": "dist/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc"
   },
+  "keywords": [
+    "mcp",
+    "zep",
+    "claude",
+    "memory"
+  ],
   "author": "",
-  "license": "ISC"
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "zep-cloud": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
 }
