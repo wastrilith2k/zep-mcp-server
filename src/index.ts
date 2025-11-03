@@ -154,6 +154,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['node_uuid'],
         },
       },
+      {
+        name: 'zep_get_thread_context',
+        description: 'Get relevant context from ALL past threads based on recent messages in current thread. Automatically pulls in relevant memories from entire conversation history.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            session_id: {
+              type: 'string',
+              description: 'Thread/Session ID to get context for',
+            },
+            mode: {
+              type: 'string',
+              description: 'Mode: "summary" (default, more detailed) or "basic" (faster, less latency)',
+              enum: ['summary', 'basic'],
+              default: 'summary',
+            },
+          },
+          required: ['session_id'],
+        },
+      },
     ],
   };
 });
@@ -358,6 +378,31 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             result += `${i + 1}. ${content}...\n`;
           });
         }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: result,
+            },
+          ],
+        };
+      }
+
+      case 'zep_get_thread_context': {
+        const { session_id, mode = 'summary' } = args as {
+          session_id: string;
+          mode?: 'summary' | 'basic';
+        };
+
+        const contextResponse = await zep.thread.getUserContext(session_id, {
+          mode: mode as any,
+        });
+
+        const result = `# Relevant Context for Thread: ${session_id}\n\n${
+          contextResponse.context ||
+          'No relevant context found from past conversations.'
+        }`;
 
         return {
           content: [
