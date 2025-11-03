@@ -112,6 +112,48 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['session_id'],
         },
       },
+      {
+        name: 'zep_get_graph_nodes',
+        description: 'Get all nodes (entities) from the user knowledge graph',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            limit: {
+              type: 'number',
+              description: 'Maximum number of nodes to return (default: 50)',
+              default: 50,
+            },
+          },
+        },
+      },
+      {
+        name: 'zep_get_graph_edges',
+        description: 'Get all edges (relationships) from the user knowledge graph',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            limit: {
+              type: 'number',
+              description: 'Maximum number of edges to return (default: 50)',
+              default: 50,
+            },
+          },
+        },
+      },
+      {
+        name: 'zep_get_node_details',
+        description: 'Get detailed information about a specific node including its edges and episodes',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            node_uuid: {
+              type: 'string',
+              description: 'UUID of the node to retrieve',
+            },
+          },
+          required: ['node_uuid'],
+        },
+      },
     ],
   };
 });
@@ -229,6 +271,99 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: formatted || 'No memories found in this thread',
+            },
+          ],
+        };
+      }
+
+      case 'zep_get_graph_nodes': {
+        const { limit = 50 } = args as { limit?: number };
+
+        const nodes = await zep.graph.node.getByUserId('default_user', {
+          limit: limit,
+        });
+
+        const formatted = nodes
+          .map((node: any, i: number) => {
+            const name = node.name || 'Unnamed';
+            const labels = node.labels?.join(', ') || 'Unknown';
+            const uuid = node.uuid || 'N/A';
+            return `${i + 1}. **${name}** (${labels})\n   UUID: ${uuid}`;
+          })
+          .join('\n\n');
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: formatted || 'No nodes found in the knowledge graph',
+            },
+          ],
+        };
+      }
+
+      case 'zep_get_graph_edges': {
+        const { limit = 50 } = args as { limit?: number };
+
+        const edges = await zep.graph.edge.getByUserId('default_user', {
+          limit: limit,
+        });
+
+        const formatted = edges
+          .map((edge: any, i: number) => {
+            const fact = edge.fact || 'No fact';
+            const name = edge.name || 'Unnamed';
+            const sourceNode = edge.sourceNodeName || 'Unknown';
+            const targetNode = edge.targetNodeName || 'Unknown';
+            return `${i + 1}. ${sourceNode} → ${targetNode}\n   Fact: ${fact}\n   Name: ${name}`;
+          })
+          .join('\n\n');
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: formatted || 'No edges found in the knowledge graph',
+            },
+          ],
+        };
+      }
+
+      case 'zep_get_node_details': {
+        const { node_uuid } = args as { node_uuid: string };
+
+        const node = await zep.graph.node.get(node_uuid);
+        const edges = await zep.graph.node.getEdges(node_uuid);
+        const episodes = await zep.graph.node.getEpisodes(node_uuid);
+
+        let result = `# Node: ${node.name || 'Unnamed'}\n\n`;
+        result += `**Labels:** ${node.labels?.join(', ') || 'Unknown'}\n`;
+        result += `**UUID:** ${node.uuid}\n`;
+        result += `**Summary:** ${node.summary || 'No summary'}\n\n`;
+
+        if (edges && edges.length > 0) {
+          result += `## Relationships (${edges.length})\n\n`;
+          edges.forEach((edge: any, i: number) => {
+            const target = edge.targetNodeName || 'Unknown';
+            const fact = edge.fact || 'No fact';
+            result += `${i + 1}. → ${target}: ${fact}\n`;
+          });
+          result += '\n';
+        }
+
+        if (episodes && episodes.episodes && episodes.episodes.length > 0) {
+          result += `## Mentioned In (${episodes.episodes.length} episodes)\n\n`;
+          episodes.episodes.slice(0, 5).forEach((episode: any, i: number) => {
+            const content = episode.content?.substring(0, 100) || 'No content';
+            result += `${i + 1}. ${content}...\n`;
+          });
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: result,
             },
           ],
         };
