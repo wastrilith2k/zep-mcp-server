@@ -5,10 +5,9 @@ Simple MCP server that wraps Zep Cloud API for use with Claude Code.
 ## Installation
 ```bash
 git clone https://github.com/yourusername/zep-mcp-server.git
-cd zep-mcp-server
-npm install
-npm run build
 ```
+
+Files are built so you don't have to build them.
 
 ## Configuration
 
