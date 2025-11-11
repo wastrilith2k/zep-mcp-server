@@ -89,13 +89,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             {
                 name: 'zep_get_memory',
-                description: 'Get all recent memories from a session',
+                description: 'Get recent memories from a session with pagination and filtering support',
                 inputSchema: {
                     type: 'object',
                     properties: {
                         session_id: {
                             type: 'string',
                             description: 'Thread/Session ID to retrieve',
+                        },
+                        lastn: {
+                            type: 'number',
+                            description: 'Number of most recent messages to return (e.g., 50, 100, 200). Useful for large sessions.',
+                        },
+                        limit: {
+                            type: 'number',
+                            description: 'Limit the number of results returned (alternative to lastn)',
+                        },
+                        cursor: {
+                            type: 'number',
+                            description: 'Cursor for pagination (used with limit)',
+                        },
+                        role_filter: {
+                            type: 'string',
+                            description: 'Filter by message role: "user", "assistant", or "system"',
+                            enum: ['user', 'assistant', 'system'],
                         },
                     },
                     required: ['session_id'],
@@ -246,20 +263,46 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 };
             }
             case 'zep_get_memory': {
-                const { session_id } = args;
-                const response = await zep.thread.get(session_id, {});
-                const messages = response.messages || [];
+                const { session_id, lastn, limit, cursor, role_filter } = args;
+                // Build request options for pagination
+                const requestOptions = {};
+                if (lastn !== undefined) {
+                    requestOptions.lastn = lastn;
+                }
+                else {
+                    if (limit !== undefined)
+                        requestOptions.limit = limit;
+                    if (cursor !== undefined)
+                        requestOptions.cursor = cursor;
+                }
+                const response = await zep.thread.get(session_id, requestOptions);
+                let messages = response.messages || [];
+                // Apply role filter if specified
+                if (role_filter) {
+                    messages = messages.filter((msg) => msg.role === role_filter);
+                }
                 const formatted = messages
-                    .filter((msg) => msg.role === 'assistant')
                     .map((msg, i) => {
-                    return `${i + 1}. ${msg.content}\n   ${JSON.stringify(msg.metadata || {})}`;
+                    const role = msg.role ? `[${msg.role}]` : '';
+                    const metadata = msg.metadata && Object.keys(msg.metadata).length > 0
+                        ? `\n   ${JSON.stringify(msg.metadata)}`
+                        : '';
+                    return `${i + 1}. ${role} ${msg.content}${metadata}`;
                 })
                     .join('\n\n');
+                // Add pagination info to response
+                let resultText = formatted || 'No memories found in this thread';
+                if (lastn !== undefined) {
+                    resultText = `Showing last ${lastn} messages:\n\n${resultText}`;
+                }
+                else if (limit !== undefined) {
+                    resultText = `Showing up to ${limit} messages${cursor ? ` (cursor: ${cursor})` : ''}:\n\n${resultText}`;
+                }
                 return {
                     content: [
                         {
                             type: 'text',
-                            text: formatted || 'No memories found in this thread',
+                            text: resultText,
                         },
                     ],
                 };

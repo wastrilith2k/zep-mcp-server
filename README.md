@@ -42,7 +42,26 @@ Store information in a Zep session.
 Search for information in a Zep session.
 
 ### zep_get_memory
-Get all recent memories from a session.
+Get recent memories from a session with pagination and filtering support.
+
+**Parameters:**
+- `session_id` (required): Thread/Session ID to retrieve
+- `lastn` (optional): Number of most recent messages to return (e.g., 50, 100, 200)
+- `limit` (optional): Limit the number of results returned (alternative to lastn)
+- `cursor` (optional): Cursor for pagination (used with limit)
+- `role_filter` (optional): Filter by message role: "user", "assistant", or "system"
+
+**Examples:**
+```
+# Get last 50 messages from a large session
+zep_get_memory(session_id="esme", lastn=50)
+
+# Get only assistant messages
+zep_get_memory(session_id="esme", lastn=100, role_filter="assistant")
+
+# Use cursor-based pagination
+zep_get_memory(session_id="esme", limit=50, cursor=0)
+```
 
 ## Thread/Session Naming Convention
 
